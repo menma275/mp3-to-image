@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>mp3-to-image // Glitch Format Converter</title>
+  
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- Sakamura Design Background -->
+  <div class="dynamic-bg"></div>
+  <div class="bg-overlay"></div>
+
+  <div class="app-container">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="logo">
+        <h1>mp3<span>.</span>image<span>.</span>glitch</h1>
+      </div>
+      <p class="subtitle">ファイル形式変換による非意図的グリッチ・ビジュアライザ</p>
+    </header>
+
+    <!-- Main Workspace -->
+    <main class="workspace">
+      
+      <!-- Left Panel: Controls -->
+      <section class="panel left-panel">
+        
+        <!-- Mode Tabs -->
+        <div class="section" style="border-bottom: 1px solid var(--color-border); padding-bottom: 0.75rem;">
+          <div class="btn-group">
+            <button class="btn btn-primary" id="tabMp3ToImage">MP3 ➔ IMAGE</button>
+            <button class="btn" id="tabImageToMp3">IMAGE ➔ MP3</button>
+          </div>
+        </div>
+
+        <!-- TAB 1: MP3 to Image Panel -->
+        <div id="mp3ToImagePanel">
+          <!-- Dropzone -->
+          <div class="dropzone" id="mp3Dropzone">
+            <div class="dropzone-content">
+              <div class="dropzone-icon-container">
+                <i data-lucide="music-4" class="dropzone-icon"></i>
+              </div>
+              <p class="dropzone-title">MP3ファイルをドラッグ＆ドロップ</p>
+              <p class="dropzone-desc">またはファイルを選択</p>
+              <input type="file" id="mp3FileInput" accept="audio/mp3,audio/mpeg" style="display: none;">
+              <button class="btn select-btn" id="selectMp3Btn">ファイルを選択</button>
+            </div>
+          </div>
+
+          <!-- File Info HUD (when loaded) -->
+          <div class="file-status hidden" id="mp3FileStatus">
+            <div class="file-info-header">
+              <div class="file-name-container">
+                <i data-lucide="file-audio" class="file-icon"></i>
+                <span class="file-name" id="mp3FileName">filename.mp3</span>
+              </div>
+              <button class="btn reset-btn" id="resetMp3Btn" title="リセット">
+                <i data-lucide="refresh-cw" style="width: 14px; height: 14px;"></i>
+              </button>
+            </div>
+            <div class="file-meta">
+              <span id="mp3FileSize">0 bytes</span>
+              <span id="mp3FileEntropy">Entropy: 0.00</span>
+            </div>
+          </div>
+
+          <!-- Section: Visualization Settings -->
+          <div class="section hidden" id="vizSettingsSec">
+            <div class="section-title">
+              <i data-lucide="sliders" class="section-title-icon"></i>
+              <h3>表示パラメータ</h3>
+            </div>
+
+            <!-- Aspect Ratio Control -->
+            <div class="form-group">
+              <label for="vizAspect">アスペクト比固定</label>
+              <select id="vizAspect">
+                <option value="free" selected>フリー (手動調整)</option>
+                <option value="1:1">1:1 (スクエア)</option>
+                <option value="16:9">16:9 (ワイド)</option>
+                <option value="4:3">4:3 (標準)</option>
+                <option value="3:2">3:2 (写真)</option>
+                <option value="21:9">21:9 (シネマ)</option>
+              </select>
+            </div>
+
+            <!-- Width Control -->
+            <div class="form-group">
+              <label for="vizWidth">
+                <span>画像幅 (ピクセル幅)</span>
+                <span class="value-display" id="vizWidthVal">512</span>
+              </label>
+              <div class="form-control-container">
+                <input type="range" id="vizWidth" min="16" max="2048" step="1" value="512">
+                <input type="number" id="vizWidthNum" min="16" max="2048" value="512">
+              </div>
+            </div>
+
+
+
+            <!-- Grid: Interpretation and Color Mode -->
+            <div class="grid-2">
+              <div class="form-group">
+                <label for="vizFormat">ピクセル解釈</label>
+                <select id="vizFormat">
+                  <option value="rgb">RGB (24bit)</option>
+                  <option value="rgba">RGBA (32bit)</option>
+                  <option value="grayscale">Grayscale (8bit)</option>
+                  <option value="rgb16">RGB (16bit)</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label for="vizPalette">カラーマッピング</label>
+                <select id="vizPalette">
+                  <option value="raw">Raw (変換なし)</option>
+                  <option value="glitch">Glitch Gold</option>
+                  <option value="cyber">Cyberpunk</option>
+                  <option value="mono">High Contrast Mono</option>
+                  <option value="haze">Organic Haze</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Grid: Skip Bytes and Scale -->
+            <div class="grid-2" style="margin-top: 1rem;">
+              <div class="form-group">
+                <label for="vizSkip">バイトスキップ (歩進幅)</label>
+                <input type="number" id="vizSkip" min="0" max="64" value="0">
+              </div>
+              <div class="form-group">
+                <label for="vizChannels">チャンネル置換</label>
+                <select id="vizChannels">
+                  <option value="rgb">RGB (通常)</option>
+                  <option value="rbg">RBG</option>
+                  <option value="grb">GRB</option>
+                  <option value="brg">BRG</option>
+                  <option value="bgr">BGR</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <!-- Section: Glitch Modifiers -->
+          <div class="section hidden" id="glitchSettingsSec">
+            <div class="section-title">
+              <i data-lucide="zap" class="section-title-icon"></i>
+              <h3>グリッチ・モディファイア</h3>
+            </div>
+
+            <p class="info-desc">
+              バイナリデータを破壊・ソートし、意図的なグリッチを生じさせます。再生音と画像にリアルタイムで影響します。
+            </p>
+
+            <!-- Corrupt rate -->
+            <div class="form-group">
+              <label for="glitchCorrupt">
+                <span>データ破壊率 (ランダム置換)</span>
+                <span class="value-display" id="glitchCorruptVal">0%</span>
+              </label>
+              <div class="form-control-container">
+                <input type="range" id="glitchCorrupt" min="0" max="5" step="0.01" value="0">
+              </div>
+            </div>
+
+            <!-- Chunk sorting -->
+            <div class="form-group">
+              <label for="glitchSort">
+                <span>バイト・ソート強度 (データ整列)</span>
+                <span class="value-display" id="glitchSortVal">0%</span>
+              </label>
+              <div class="form-control-container">
+                <input type="range" id="glitchSort" min="0" max="100" step="1" value="0">
+              </div>
+            </div>
+
+            <!-- Bitwise XOR -->
+            <div class="form-group">
+              <label for="glitchXor">
+                <span>ビット演算 (XORマスク)</span>
+                <span class="value-display" id="glitchXorVal">0x00</span>
+              </label>
+              <div class="form-control-container">
+                <input type="range" id="glitchXor" min="0" max="255" step="1" value="0">
+              </div>
+            </div>
+
+            <div class="btn-group" style="margin-top: 1rem;">
+              <button class="btn btn-primary btn-block" id="applyGlitchBtn">
+                <i data-lucide="rotate-3d"></i>グリッチを再適用
+              </button>
+              <button class="btn btn-danger" id="clearGlitchBtn" title="グリッチをクリア">
+                <i data-lucide="trash-2"></i>
+              </button>
+            </div>
+          </div>
+
+          <!-- Section: Sonification (Audification) -->
+          <div class="section hidden" id="audioSettingsSec">
+            <div class="section-title">
+              <i data-lucide="volume-2" class="section-title-icon"></i>
+              <h3>ソニフィケーション (可聴化)</h3>
+            </div>
+
+            <p class="info-desc">
+              <code>Raw Audio</code> はバイナリデータをPCMノイズとして再生します。
+              <code>Decoded MP3</code> はグリッチしたMP3のデコード再生を試みます。
+            </p>
+
+            <div class="grid-2">
+              <div class="form-group">
+                <label for="sonifyRate">サンプリングレート</label>
+                <select id="sonifyRate">
+                  <option value="8000">8000 Hz</option>
+                  <option value="11025">11025 Hz</option>
+                  <option value="22050">22050 Hz</option>
+                  <option value="44100" selected>44100 Hz</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label for="sonifyType">音波解釈</label>
+                <select id="sonifyType">
+                  <option value="uint8">Unsigned 8bit (PCM)</option>
+                  <option value="int8">Signed 8bit (PCM)</option>
+                  <option value="mulaw">µ-law (8bit)</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="player-controls">
+              <button class="btn btn-primary" id="playAudioBtn">
+                <i data-lucide="play"></i> <span>RAW 再生</span>
+              </button>
+              <button class="btn" id="playMp3Btn">
+                <i data-lucide="speaker"></i> <span>MP3 再生</span>
+              </button>
+              <div class="playback-status" id="audioStatus">STOPPED</div>
+            </div>
+          </div>
+
+          <!-- Section: Exports -->
+          <div class="section hidden" id="exportSec">
+            <div class="section-title">
+              <i data-lucide="download" class="section-title-icon"></i>
+              <h3>書き出し・エクスポート</h3>
+            </div>
+
+            <div class="form-group" style="display: flex; flex-direction: column; gap: 0.5rem;">
+              <!-- Export current Canvas -->
+              <button class="btn btn-block" id="exportPngBtn">
+                <i data-lucide="image"></i>キャンバス画像を保存 (PNG)
+              </button>
+              
+              <!-- Export as glitched BMP -->
+              <button class="btn btn-block" id="exportBmpBtn">
+                <i data-lucide="file-image"></i>偽装画像ファイルを保存 (MP3+BMPヘッダー)
+              </button>
+              
+              <!-- Export modified MP3 -->
+              <button class="btn btn-primary btn-block" id="exportMp3Btn">
+                <i data-lucide="file-audio-2"></i>グリッチMP3ファイルを保存 (MP3)
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB 2: Image to MP3 Panel -->
+        <div id="imageToMp3Panel" class="hidden">
+          <!-- Dropzone -->
+          <div class="dropzone" id="imgDropzone">
+            <div class="dropzone-content">
+              <div class="dropzone-icon-container">
+                <i data-lucide="image" class="dropzone-icon"></i>
+              </div>
+              <p class="dropzone-title">画像ファイルをドラッグ＆ドロップ</p>
+              <p class="dropzone-desc">またはファイルを選択</p>
+              <input type="file" id="imgFileInput" accept="image/*" style="display: none;">
+              <button class="btn select-btn" id="selectImgBtn">ファイルを選択</button>
+            </div>
+          </div>
+
+          <!-- File Info HUD (when loaded) -->
+          <div class="file-status hidden" id="imgFileStatus">
+            <div class="file-info-header">
+              <div class="file-name-container">
+                <i data-lucide="file-image" class="file-icon"></i>
+                <span class="file-name" id="imgFileName">filename.png</span>
+              </div>
+              <button class="btn reset-btn" id="resetImgBtn" title="リセット">
+                <i data-lucide="refresh-cw" style="width: 14px; height: 14px;"></i>
+              </button>
+            </div>
+            <div class="file-meta">
+              <span id="imgDimensions">0 x 0 px</span>
+              <span id="imgFileSize">0 bytes</span>
+            </div>
+          </div>
+
+          <!-- Section: Audio Creation Settings -->
+          <div class="section hidden" id="imgAudioSettingsSec">
+            <div class="section-title">
+              <i data-lucide="settings" class="section-title-icon"></i>
+              <h3>オーディオ変換設定</h3>
+            </div>
+
+            <p class="info-desc">
+              画像をバイナリデータに変換し、ダミーのMP3ヘッダーを挿入して再生可能な形式を作ります。
+            </p>
+
+            <div class="form-group">
+              <label for="imgHeaderType">ヘッダー挿入モード</label>
+              <select id="imgHeaderType">
+                <option value="raw">ヘッダーなし (純粋なRawノイズ)</option>
+                <option value="mp3_frame" selected>MP3フレーム偽装 (簡易MP3ヘッダー付与)</option>
+                <option value="wav">WAVコンテナ埋め込み (完全な再生互換性)</option>
+              </select>
+            </div>
+
+              <div class="grid-2">
+                <div class="form-group">
+                  <label for="imgSampleRate">変換サンプルレート</label>
+                  <select id="imgSampleRate">
+                    <option value="8000">8000 Hz</option>
+                    <option value="11025">11025 Hz</option>
+                    <option value="22050">22050 Hz</option>
+                    <option value="44100" selected>44100 Hz</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label for="imgColorMap">音へのマッピング</label>
+                  <select id="imgColorMap">
+                    <option value="brightness">ピクセル明度 ➔ 振幅</option>
+                    <option value="rgba_stream" selected>RGBAバイトストリーム</option>
+                    <option value="rgb_stream">RGBバイトストリーム</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <!-- Section: Image to MP3 Play & Export -->
+            <div class="section hidden" id="imgExportSec">
+              <div class="section-title">
+                <i data-lucide="play-circle" class="section-title-icon"></i>
+                <h3>再生と書き出し</h3>
+              </div>
+
+              <div class="player-controls">
+                <button class="btn btn-primary" id="playImgAudioBtn">
+                  <i data-lucide="play"></i> <span>グリッチ音響を再生</span>
+                </button>
+                <div class="playback-status" id="imgAudioStatus">STOPPED</div>
+              </div>
+
+              <div class="form-group" style="display: flex; flex-direction: column; gap: 0.5rem; margin-top: 1.5rem;">
+                <button class="btn btn-block btn-primary" id="downloadImgAudioBtn">
+                  <i data-lucide="download"></i>グリッチ・オーディオを保存
+                </button>
+              </div>
+            </div>
+          </div>
+
+      </section>
+
+      <!-- Right Panel: Canvas & Technical HUD -->
+      <section class="panel right-panel">
+        
+        <!-- The Canvas Wrapper -->
+        <div class="canvas-wrapper">
+          <canvas id="glitchCanvas" width="512" height="512"></canvas>
+        </div>
+
+        <!-- Canvas controls/info -->
+        <div class="canvas-actions">
+          <div class="canvas-status" id="canvasStatus">ファイル未ロード</div>
+          <div class="zoom-controls">
+            <button class="btn zoom-btn" id="zoomOutBtn"><i data-lucide="zoom-out" style="width: 12px; height: 12px;"></i></button>
+            <span id="zoomLevel" style="font-family: var(--font-mono); font-size: 0.75rem;">100%</span>
+            <button class="btn zoom-btn" id="zoomInBtn"><i data-lucide="zoom-in" style="width: 12px; height: 12px;"></i></button>
+            <button class="btn zoom-btn" id="zoomFitBtn">FIT</button>
+          </div>
+        </div>
+
+        <!-- Playback Seek Bar Panel -->
+        <div class="audio-seek-panel hidden" id="audioSeekPanel">
+          <!-- Unified Interactive Timeline Visual -->
+          <div class="timeline-visual" id="timelineVisual" style="cursor: pointer; user-select: none;">
+            <canvas id="waveformCanvas"></canvas>
+            <div class="timeline-range-highlight" id="timelineRangeHighlight">
+              <div class="timeline-handle timeline-handle-left" id="timelineHandleLeft" style="cursor: ew-resize;"></div>
+              <div class="timeline-handle timeline-handle-right" id="timelineHandleRight" style="cursor: ew-resize;"></div>
+            </div>
+            <div class="timeline-playhead" id="timelinePlayhead"></div>
+          </div>
+
+          <!-- Inline labels to show active range -->
+          <div class="timeline-labels" style="display: flex; justify-content: space-between; font-family: var(--font-mono); font-size: 0.72rem; color: var(--color-fg-secondary); margin-bottom: 0.5rem;">
+            <div>START: <span id="vizStartOffsetVal" style="color: var(--color-fg-primary); font-weight: 500;">0</span></div>
+            <div>END: <span id="vizEndOffsetVal" style="color: var(--color-fg-primary); font-weight: 500;">0</span></div>
+          </div>
+
+          <!-- Playback SeekBar -->
+          <div class="seek-bar-container">
+            <span class="time-display" id="seekCurrentTime">00:00</span>
+            <input type="range" id="audioSeekBar" min="0" max="100" step="0.01" value="0">
+            <span class="time-display" id="seekDuration">00:00</span>
+          </div>
+
+          <div class="seek-controls">
+            <div class="btn-group">
+              <button class="btn btn-primary" id="seekPlayBtn">
+                <i data-lucide="play"></i> <span>再生</span>
+              </button>
+              <button class="btn" id="seekStopBtn">
+                <i data-lucide="square"></i> <span>停止</span>
+              </button>
+            </div>
+            <span class="seek-status-text" id="seekStatusText">範囲未指定</span>
+          </div>
+        </div>
+
+        <!-- Technical Detail HUD -->
+        <div class="hud-panel">
+          <div class="hud-item">
+            <span>解像度 (W x H)</span>
+            <span id="hudResolution">0 x 0</span>
+          </div>
+          <div class="hud-item">
+            <span>バイトサイズ</span>
+            <span id="hudBytes">0 bytes</span>
+          </div>
+          <div class="hud-item">
+            <span>データエントロピー</span>
+            <span id="hudEntropy">0.000</span>
+          </div>
+          <div class="hud-item">
+            <span>グリッチ適用率</span>
+            <span id="hudGlitchRatio">0.00%</span>
+          </div>
+          <div class="hud-item">
+            <span>推定フレーム数</span>
+            <span id="hudFrames">N/A</span>
+          </div>
+          <div class="hud-item">
+            <span>ID3タグサイズ</span>
+            <span id="hudId3Size">N/A</span>
+          </div>
+        </div>
+
+      </section>
+
+    </main>
+  </div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

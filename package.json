@@ -1,0 +1,14 @@
+{
+  "name": "mp3-image-glitch",
+  "version": "1.0.0",
+  "description": "MP3 Image Glitch Converter",
+  "main": "index.html",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "vite": "^5.0.0"
+  }
+}
