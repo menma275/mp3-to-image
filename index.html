@@ -119,11 +119,39 @@
                 <label for="vizPalette">カラーマッピング</label>
                 <select id="vizPalette">
                   <option value="raw">Raw (変換なし)</option>
+                  <option value="structure">MP3 Structure (構造マッピング)</option>
                   <option value="glitch">Glitch Gold</option>
                   <option value="cyber">Cyberpunk</option>
                   <option value="mono">High Contrast Mono</option>
                   <option value="haze">Organic Haze</option>
                 </select>
+              </div>
+            </div>
+
+            <!-- Structure Palette Color Pickers (Visible only when 'structure' is selected) -->
+            <div id="structureColorPanel" class="hidden" style="margin-top: 1rem; border-top: 1px solid var(--color-border); padding-top: 1rem;">
+              <span style="font-family: var(--font-mono); font-size: 0.8rem; font-weight: 600; display: block; margin-bottom: 0.5rem;">構造カラー設定</span>
+              <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 0.75rem;">
+                <div class="form-group" style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0;">
+                  <input type="color" id="colId3v2" value="#a855f7" style="border: 1px solid var(--color-border); width: 28px; height: 28px; padding: 0; cursor: pointer; background: none;">
+                  <label for="colId3v2" style="font-size: 0.75rem; margin-bottom: 0;">ID3v2</label>
+                </div>
+                <div class="form-group" style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0;">
+                  <input type="color" id="colHeader" value="#f5b111" style="border: 1px solid var(--color-border); width: 28px; height: 28px; padding: 0; cursor: pointer; background: none;">
+                  <label for="colHeader" style="font-size: 0.75rem; margin-bottom: 0;">Header</label>
+                </div>
+                <div class="form-group" style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0;">
+                  <input type="color" id="colAudio" value="#1e90ff" style="border: 1px solid var(--color-border); width: 28px; height: 28px; padding: 0; cursor: pointer; background: none;">
+                  <label for="colAudio" style="font-size: 0.75rem; margin-bottom: 0;">Audio</label>
+                </div>
+                <div class="form-group" style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0;">
+                  <input type="color" id="colId3v1" value="#10b981" style="border: 1px solid var(--color-border); width: 28px; height: 28px; padding: 0; cursor: pointer; background: none;">
+                  <label for="colId3v1" style="font-size: 0.75rem; margin-bottom: 0;">ID3v1</label>
+                </div>
+                <div class="form-group" style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0;">
+                  <input type="color" id="colUnknown" value="#1e1e1e" style="border: 1px solid var(--color-border); width: 28px; height: 28px; padding: 0; cursor: pointer; background: none;">
+                  <label for="colUnknown" style="font-size: 0.75rem; margin-bottom: 0;">Glitched</label>
+                </div>
               </div>
             </div>
 

@@ -136,6 +136,7 @@ document.addEventListener('DOMContentLoaded', () => {
     fileName: '',
     originalBuffer: null, // ArrayBuffer
     glitchedBuffer: null, // ArrayBuffer
+    structureMap: null,   // Uint8Array (mapping each byte to a structure type)
     id3Size: 0,
     estimatedFrames: 0,
     entropy: 0.0,
@@ -274,6 +275,186 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
     return entropy;
+  }
+
+  function buildMP3StructureMap(buffer, id3Size) {
+    const u8 = new Uint8Array(buffer);
+    const len = u8.length;
+    const structureMap = new Uint8Array(len); // Default is 0 (Unknown/Padding/Glitch)
+
+    // 1. Mark ID3v2 Tag (Type 1)
+    if (id3Size > 0) {
+      const actualId3Size = Math.min(id3Size, len);
+      for (let i = 0; i < actualId3Size; i++) {
+        structureMap[i] = 1;
+      }
+    }
+
+    // 2. Mark ID3v1 Tag (Type 4)
+    // ID3v1 is always at the last 128 bytes of the file and starts with 'TAG'
+    if (len >= 128) {
+      const tagOffset = len - 128;
+      if (u8[tagOffset] === 0x54 &&     // 'T'
+          u8[tagOffset + 1] === 0x41 && // 'A'
+          u8[tagOffset + 2] === 0x47) { // 'G'
+        for (let i = tagOffset; i < len; i++) {
+          structureMap[i] = 4;
+        }
+      }
+    }
+
+    // 3. Scan for MPEG Audio Frames (Header: Type 2, Audio Data: Type 3)
+    const scanStart = id3Size > 0 ? id3Size : 0;
+    const scanEnd = len - 4;
+
+    for (let i = scanStart; i < scanEnd; i++) {
+      // Look for syncword (11 bits of 1s: 0xFF + & 0xE0 === 0xE0)
+      const b0 = u8[i];
+      const b1 = u8[i + 1];
+      if (b0 === 0xFF && (b1 & 0xE0) === 0xE0) {
+        const verId = (b1 >> 3) & 0x03; // bit 4-3: Version ID (00=2.5, 01=reserved, 10=2, 11=1)
+        if (verId === 0x01) continue; // Reserved version
+
+        const layer = (b1 >> 1) & 0x03; // bit 2-1: Layer ID (00=reserved, 01=L3, 10=L2, 11=L1)
+        if (layer === 0x00) continue; // Reserved layer
+
+        const b2 = u8[i + 2];
+        const bitrateIdx = (b2 >> 4) & 0x0F;
+        const samplerateIdx = (b2 >> 2) & 0x03;
+
+        if (bitrateIdx === 0x00 || bitrateIdx === 0x0F || samplerateIdx === 0x03) {
+          // Invalid bitrate or samplerate index
+          continue;
+        }
+
+        const isMpeg1 = verId === 0x03;
+        const isMpeg2 = verId === 0x02;
+        const isMpeg25 = verId === 0x00;
+
+        // Bitrate table (kbps)
+        let bitrate = 0;
+        if (isMpeg1) {
+          if (layer === 0x01) { // Layer III
+            bitrate = [0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 0][bitrateIdx];
+          } else if (layer === 0x02) { // Layer II
+            bitrate = [0, 32, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 384, 0][bitrateIdx];
+          } else if (layer === 0x03) { // Layer I
+            bitrate = [0, 32, 64, 96, 128, 160, 192, 224, 256, 288, 320, 352, 384, 416, 448, 0][bitrateIdx];
+          }
+        } else { // MPEG 2 & 2.5
+          if (layer === 0x01) { // Layer III
+            bitrate = [0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160, 0][bitrateIdx];
+          } else { // Layer I & II
+            bitrate = [0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160, 0][bitrateIdx];
+          }
+        }
+
+        // Samplerate table (Hz)
+        let srate = 0;
+        if (isMpeg1) {
+          srate = [44100, 48000, 32000, 0][samplerateIdx];
+        } else if (isMpeg2) {
+          srate = [22050, 24000, 16000, 0][samplerateIdx];
+        } else if (isMpeg25) {
+          srate = [11025, 12000, 8000, 0][samplerateIdx];
+        }
+
+        const padding = (b2 >> 1) & 0x01;
+
+        if (bitrate > 0 && srate > 0) {
+          let frameSize = 0;
+          if (layer === 0x01) { // Layer III
+            const coeff = isMpeg1 ? 144 : 72;
+            frameSize = Math.floor((coeff * bitrate * 1000) / srate) + padding;
+          } else if (layer === 0x02) { // Layer II
+            frameSize = Math.floor((144 * bitrate * 1000) / srate) + padding;
+          } else if (layer === 0x03) { // Layer I
+            frameSize = Math.floor((12 * bitrate * 1000) / srate + padding) * 4;
+          }
+
+          if (frameSize > 4 && i + frameSize <= len) {
+            // Check if this frame collides with ID3v1 at the end
+            let collidesWithId3v1 = false;
+            for (let j = 0; j < frameSize; j++) {
+              if (structureMap[i + j] === 4) { // Already marked as ID3v1
+                collidesWithId3v1 = true;
+                break;
+              }
+            }
+            if (collidesWithId3v1) break; // Reached end ID3v1, stop frame scanning
+
+            // Mark Frame Header (4 bytes)
+            for (let j = 0; j < 4; j++) {
+              structureMap[i + j] = 2;
+            }
+            // Mark Audio Data (Rest of the frame)
+            for (let j = 4; j < frameSize; j++) {
+              structureMap[i + j] = 3;
+            }
+
+            // Skip to the end of the frame
+            i += frameSize - 1;
+          }
+        }
+      }
+    }
+
+    return structureMap;
+  }
+
+  function hexToRgb(hex) {
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    return [r, g, b];
+  }
+
+  function getStructureColor(byteIdx, val) {
+    if (!mp3State.structureMap || byteIdx >= mp3State.structureMap.length) {
+      const defaultHex = document.getElementById('colUnknown').value;
+      const rgb = hexToRgb(defaultHex);
+      return [rgb[0], rgb[1], rgb[2], 255];
+    }
+    const type = mp3State.structureMap[byteIdx];
+    let r = 0, g = 0, b = 0, a = 255;
+
+    switch (type) {
+      case 1: { // ID3v2 Tag (Purple / Magenta)
+        const hex = document.getElementById('colId3v2').value;
+        const rgb = hexToRgb(hex);
+        r = rgb[0]; g = rgb[1]; b = rgb[2];
+        break;
+      }
+      case 2: { // MPEG Frame Header (Gold / Accent)
+        const hex = document.getElementById('colHeader').value;
+        const rgb = hexToRgb(hex);
+        r = rgb[0]; g = rgb[1]; b = rgb[2];
+        break;
+      }
+      case 3: { // MPEG Audio Data (Gradient based on the custom color)
+        const hex = document.getElementById('colAudio').value;
+        const rgb = hexToRgb(hex);
+        // Apply factor based on pixel brightness (0.2 minimum ambient light to 1.0 maximum)
+        const factor = 0.2 + 0.8 * (val / 255);
+        r = Math.min(255, Math.floor(rgb[0] * factor));
+        g = Math.min(255, Math.floor(rgb[1] * factor));
+        b = Math.min(255, Math.floor(rgb[2] * factor));
+        break;
+      }
+      case 4: { // ID3v1 Tag (Emerald Green)
+        const hex = document.getElementById('colId3v1').value;
+        const rgb = hexToRgb(hex);
+        r = rgb[0]; g = rgb[1]; b = rgb[2];
+        break;
+      }
+      default: { // 0: Unknown / Glitch Gap (Dark Gray)
+        const hex = document.getElementById('colUnknown').value;
+        const rgb = hexToRgb(hex);
+        r = rgb[0]; g = rgb[1]; b = rgb[2];
+        break;
+      }
+    }
+    return [r, g, b, a];
   }
 
   function drawWaveform(audioBuffer) {
@@ -430,6 +611,7 @@ document.addEventListener('DOMContentLoaded', () => {
     stopAllAudio();
     mp3State.originalBuffer = null;
     mp3State.glitchedBuffer = null;
+    mp3State.structureMap = null;
     mp3State.fileName = '';
     mp3State.id3Size = 0;
     mp3State.estimatedFrames = 0;
@@ -527,6 +709,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     mp3State.glitchedBuffer = glitchedU8.buffer;
+    mp3State.structureMap = buildMP3StructureMap(mp3State.glitchedBuffer, mp3State.id3Size);
     mp3State.glitchRatio = (corruptedBytesCount / originalU8.length) * 100;
     if (mp3State.glitchRatio > 100) mp3State.glitchRatio = 100.0;
 
@@ -747,8 +930,23 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   glitchXor.addEventListener('change', applyGlitchPipeline);
 
+  const vizPalette = document.getElementById('vizPalette');
+  const structureColorPanel = document.getElementById('structureColorPanel');
+
+  vizPalette.addEventListener('change', () => {
+    if (vizPalette.value === 'structure') {
+      structureColorPanel.classList.remove('hidden');
+    } else {
+      structureColorPanel.classList.add('hidden');
+    }
+    renderCanvasFromMp3();
+  });
+
+  ['colId3v2', 'colHeader', 'colAudio', 'colId3v1', 'colUnknown'].forEach(id => {
+    document.getElementById(id).addEventListener('input', renderCanvasFromMp3);
+  });
+
   document.getElementById('vizFormat').addEventListener('change', renderCanvasFromMp3);
-  document.getElementById('vizPalette').addEventListener('change', renderCanvasFromMp3);
   document.getElementById('vizSkip').addEventListener('change', renderCanvasFromMp3);
   document.getElementById('vizChannels').addEventListener('change', renderCanvasFromMp3);
 
@@ -826,7 +1024,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (format === 'grayscale') {
           const val = dataBytes[byteIdx];
-          if (lut) {
+          if (paletteName === 'structure') {
+            const col = getStructureColor(byteIdx, val);
+            r = col[0]; g = col[1]; b = col[2]; a = col[3];
+          } else if (lut) {
             r = lut[val * 3];
             g = lut[val * 3 + 1];
             b = lut[val * 3 + 2];
@@ -838,8 +1039,11 @@ document.addEventListener('DOMContentLoaded', () => {
           const b1 = dataBytes[byteIdx + 1];
           const b2 = dataBytes[byteIdx + 2];
 
-          if (lut) {
-            const lum = Math.floor(0.299 * b0 + 0.587 * b1 + 0.114 * b2);
+          const lum = Math.floor(0.299 * b0 + 0.587 * b1 + 0.114 * b2);
+          if (paletteName === 'structure') {
+            const col = getStructureColor(byteIdx, lum);
+            r = col[0]; g = col[1]; b = col[2]; a = col[3];
+          } else if (lut) {
             r = lut[lum * 3];
             g = lut[lum * 3 + 1];
             b = lut[lum * 3 + 2];
@@ -856,8 +1060,12 @@ document.addEventListener('DOMContentLoaded', () => {
           const b2 = dataBytes[byteIdx + 2];
           const b3 = dataBytes[byteIdx + 3];
 
-          if (lut) {
-            const lum = Math.floor(0.299 * b0 + 0.587 * b1 + 0.114 * b2);
+          const lum = Math.floor(0.299 * b0 + 0.587 * b1 + 0.114 * b2);
+          if (paletteName === 'structure') {
+            const col = getStructureColor(byteIdx, lum);
+            r = col[0]; g = col[1]; b = col[2];
+            a = b3;
+          } else if (lut) {
             r = lut[lum * 3];
             g = lut[lum * 3 + 1];
             b = lut[lum * 3 + 2];
@@ -881,8 +1089,11 @@ document.addEventListener('DOMContentLoaded', () => {
           const rawG = Math.floor(g6 * 255 / 63);
           const rawB = Math.floor(b5 * 255 / 31);
 
-          if (lut) {
-            const lum = Math.floor(0.299 * rawR + 0.587 * rawG + 0.114 * rawB);
+          const lum = Math.floor(0.299 * rawR + 0.587 * rawG + 0.114 * rawB);
+          if (paletteName === 'structure') {
+            const col = getStructureColor(byteIdx, lum);
+            r = col[0]; g = col[1]; b = col[2]; a = col[3];
+          } else if (lut) {
             r = lut[lum * 3];
             g = lut[lum * 3 + 1];
             b = lut[lum * 3 + 2];
